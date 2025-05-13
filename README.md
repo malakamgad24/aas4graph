@@ -1,42 +1,55 @@
-# AAS - Neo4j
+# AASQL → Cypher Translator
 
-This project is a proof of concept for the mapping of the Asset Administration Shell (AAS) in a Neo4J graph database.
+This tool converts Asset Administration Shell (AAS) queries (JSON) into Neo4j Cypher.
 
+# Usage
 
-# How it works
+1. Run the translator tests: 
+    
+    python translator.py
 
-It reads an AAS and generates a Cypher clauses to create the graph in Neo4j.
-These clauses are then executed in the Neo4j database.
+2. Execute each example separately:
 
-## AAS - Neo4j Mapping
+    python TestAASTranslator.py 01
+    python TestAASTranslator.py 02
+    python TestAASTranslator.py 03
+    python TestAASTranslator.py 04
+    python TestAASTranslator.py 09
 
-1. ``Referable`` = ``Node``
-1. ``AssetInformation`` = ``Node``
-2. If ``Referable`` contains other ``Referable`` -> ``Relationship``
-3. ``Reference`` is a ``Relationship``
+3. Benchmark performance
 
-## Limitation or Not implemented
-- Only basic Deserialization from Neo4j is implemented
-- AAS Query Language Mapping to Cypher
+    python benchmark.py
 
-# Getting started
+This script uses Python's timeit to run one example 1000× and reports the average execution time.
 
-## Run Neo4J server
-```
-YOUR_PATH_TO_NEO4J\neo4j-community-5.23.0\bin\neo4j console
-```
+4. Try in Neo4j
 
-## Add the AAS to Neo4j
+    Load the digitalnameplate example .cypher file into your Neo4j browser. (you can just copy idta_digital_nameplate_light.cypher)
 
-```python
-from aas_mapping.aasjson2neo import AASNeo4JClient
+    In TestAASTranslator.py, comment out the line: # unittest.main()
 
-aas_neo4j_client = AASNeo4JClient(uri="bolt://localhost:7687", user="neo4j", password="password")
-aas_neo4j_client.upload_aas_json("SOME_AAS.json")
-```
+    At the bottom of the file, you can run manual translations. For example:
 
-## Show all nodes in Neo4j Browser
-```
-MATCH (n)
-RETURN n;
-```
+        "05_eq_country_of_origin": {
+        "$condition": {
+            "$eq": [
+            { "$field": "$sme.CountryOfOrigin#value" },
+            { "$strVal": "DE" }
+            ]
+        }
+        }
+
+        Then, print the generated Cypher and execute that in Neo4j to see results.
+
+# Project Structure
+
+.
+├── translator.py            # Core translation logic
+├── TestAASTranslator.py     # Unit tests and manual tests harness
+├── benchmark.py             # Performance measurement script
+├── README_translator.md     # This file
+└── aas_mapping/examples/queries/
+    ├── 01/01_contains_string.json
+    ├── 01/01_contains_string.cypher
+    ├── ...
+    └── 09/09_query_match_eq.json
