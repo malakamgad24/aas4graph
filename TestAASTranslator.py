@@ -65,9 +65,9 @@ if __name__ == "__main__":
         TestAASTranslator.LEVEL = sys.argv[1]
         sys.argv.pop(1)  # Remove the custom argument so unittest doesn't get confused
 
-    # unittest.main()
+    unittest.main() #comment to run manual tests
 
-        # ================================
+    # ================================
     # Manual translation tests
     # ================================
     queries = {

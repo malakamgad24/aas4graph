@@ -52,25 +52,29 @@ class MatchPatternBuilder:
             return self.registered[field_str]
 
         segments = parse_field_path(field_str)
-        curr = "sm0"
-
-        # Always use the same base array node
         array_name = segments[0]["name"]
+
+        # Use a per-array match group key
         if "match_array" not in self.ctx:
-            self.ctx["match_array"] = {
-                "array_var": self.next_var("sme"),
-                "shared_var": self.next_var("sme")
+            self.ctx["match_array"] = {}
+        if array_name not in self.ctx["match_array"]:
+            array_var = self.next_var("sme")
+            shared_var = self.next_var("sme")
+            self.ctx["match_array"][array_name] = {
+                "array_var": array_var,
+                "shared_var": shared_var
             }
             self.ctx["clauses"].append(
-                f'(sm0:Submodel)-[:child]->({self.ctx["match_array"]["array_var"]}:SubmodelElement {{idShort:"{array_name}"}})'
+                f'(sm0:Submodel)-[:child]->({array_var}:SubmodelElement {{idShort:"{array_name}"}})'
             )
             self.ctx["clauses"].append(
-                f'({self.ctx["match_array"]["array_var"]})-[:child]->({self.ctx["match_array"]["shared_var"]}:SubmodelElement)'
+                f'({array_var})-[:child]->({shared_var}:SubmodelElement)'
             )
 
-        curr = self.ctx["match_array"]["shared_var"]
+        match_path = self.ctx["match_array"][array_name]
+        curr = match_path["shared_var"]
 
-        # Now build the remaining chain
+        # Traverse remaining segments
         for seg in segments[1:]:
             if seg["name"]:
                 next_var = self.next_var("sme")
@@ -143,33 +147,41 @@ class MatchPatternBuilder:
             if c not in uniq:
                 uniq.append(c)
 
-        # Flatten match_array chain properly
+        # Flatten only the first 3 clauses into one chain when using $match
         if "match_array" in self.ctx:
             try:
-                parts = uniq[:3]
-                links = []
+                parts = uniq[:3]   # should be exactly:
+                                   # 1) (sm0:Submodel)-[:child]->(sme0:SubmodelElement {...})
+                                   # 2) (sme0)-[:child]->(sme1:SubmodelElement)
+                                   # 3) (sme1)-[:child]->(sme2:SubmodelElement {...})
+                nodes = []
+                for i, clause in enumerate(parts):
+                    # Split on the *relationship* marker, not on plain "->"
+                    lhs, rhs = clause.split(")-[:child]->(", 1)
+                    lhs_node = lhs.strip() + ")"        # restore closing paren
+                    rhs_node = "(" + rhs.strip()        # restore leading paren
+                    if rhs_node.endswith(","):
+                        rhs_node = rhs_node[:-1]        # drop any trailing comma
+                    # For the first clause, keep both LHS and RHS; thereafter only RHS
+                    if i == 0:
+                        nodes.append(lhs_node)
+                    nodes.append(rhs_node)
 
-                for clause in parts:
-                    if "->" in clause:
-                        lhs, rhs = clause.split("->")
-                        lhs = lhs.strip()
-                        rhs = rhs.strip()
-                        links.append((lhs, rhs))
-
-                # Build chain like: (A)-[:child]->(B)-[:child]->(C)-[:child]->(D)
-                nodes = [links[0][0]]  # start with first lhs
-                for _, rhs in links:
-                    nodes.append(rhs)
+                # Join them with a single arrow each
                 chain = "-[:child]->".join(nodes)
 
                 rest = uniq[3:]
                 if rest:
+                    # indent any remaining patterns on a new line
                     return f"MATCH {chain},\n      " + ",\n      ".join(rest)
-                return f"MATCH {chain}"
-            except Exception:
-                pass  # fallback to normal formatting
+                else:
+                    return f"MATCH {chain}"
 
-        # fallback formatting
+            except Exception:
+                # fallback to default formatting if anything goes wrong
+                pass
+
+        # ─── Fallback: ordinary multi‐line formatting ──────────────────────
         if self.ctx["skip_label"] and uniq:
             clauses = ["(sm0)"] + uniq
         else:
@@ -181,6 +193,7 @@ class MatchPatternBuilder:
             return "MATCH " + clauses[0]
         first, rest = clauses[0], clauses[1:]
         return "MATCH " + first + ",\n      " + ",\n      ".join(rest)
+
 # ─────────────────────────────────────────────────────────────
 # FieldTranslator: flatten to var.prop
 # ─────────────────────────────────────────────────────────────
